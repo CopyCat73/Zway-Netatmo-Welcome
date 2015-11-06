@@ -1,32 +1,21 @@
-# Zway Netatmo
+# Zway Netatmo Welcome
 
-Zway Automation module for the Netatmo weather station and modules. It uses the netatmo api to retrieve data at
+Zway Automation module for the Netatmo Welcome camera. It uses the netatmo api to retrieve data at
 a specified interval.
-
-Many thanks to
-
-    - Maroš Kollár for his code examples, parts of which I shamelessly copied
-    - Fibaro forum user Couillerot for his icons
 
 # Configuration
 
 First go to https://dev.netatmo.com and log in with your Netatmo user account.
 Create a new app for your z-way installation. Enter the client ID, client secret and
 your Netatmo credentials in the configuration, along with the desired interval at which
-data is retrieved (in minutes).
+data is retrieved (in minutes). Do not use the same app credentials for different Netatmo modules in zway
+(e.g. weather station and welcome).
 
-# Virtual Devices
+# Homes and users
 
-Based on your Netatmo configuration the module creates virtual devices for each of your Netatmo
-weather stations and attached modules. Temperature unit configuration and module names are retrieved
-from the api. 
-
-Currently supported devices are:
-
-*   Netatmo base station (Temperature, humidity, CO2, noise and pressure)
-*   Outdoor module (Temperature and humidity)
-*   Additional indoor module (Temperature, humidity and CO2)
-*   Rain gauge (Rain, Rain last hour and rain last 24 hours)
+Based on your Netatmo configuration the module creates a home and users for each of your Netatmo
+Welcome devices. Each identified user in the Welcome station is shown on the dashboard as a binary switch;
+off: user left, on: user is home.
 
 # Events
 
