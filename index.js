@@ -47,7 +47,7 @@ NetatmoWelcome.prototype.init = function (config) {
     this.langFile           = self.controller.loadModuleLang("NetatmoWelcome");
 
     var intervalTime    = parseInt(self.config.interval) * 60 * 1000;
-    
+        
     self.timer = setInterval(function() {
         self.startFetch(self);
     }, intervalTime);
@@ -102,7 +102,7 @@ NetatmoWelcome.prototype.startFetch = function (instance) {
     }
     else {
         //console.logJS('token ok');
-        self.fetchStationData(instance);
+        self.fetchHomeData(instance);
         
     }
 }        
@@ -252,32 +252,3 @@ NetatmoWelcome.prototype.processResponse = function(instance,response) {
     }
 };
 
-NetatmoWelcome.prototype.getUnit = function(instance,string) {
-    
-    var self = instance;
-    string = string.toLowerCase();
-    
-    switch (string) {
-        case 'temperature':
-            string=self.temperatureUnit;
-            break;
-        case 'humidity':
-            string = '%';
-            break;
-        case 'co2':
-            string = 'ppm';
-            break;
-        case 'noise':
-            string = 'db';
-            break;
-       case 'pressure':
-            string = 'mbar';
-            break;
-       case 'rain':
-            string = 'mm';
-            break;
-    }
-    
-    return string;
-
-};
