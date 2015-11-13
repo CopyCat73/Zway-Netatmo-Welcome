@@ -178,6 +178,10 @@ NetatmoWelcome.prototype.fetchToken = function (instance) {
                     "module", 
                     "NetatmoWelcome"
                 );
+                if (response.data.status == -1 && response.data.statusText.toLowerCase().indexOf('timeout') != -1) {
+                    // should not be happening, but anyway..
+                    self.fetchToken(instance);
+                }
             }
         });        
     }
