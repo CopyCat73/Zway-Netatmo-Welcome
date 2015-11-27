@@ -37,6 +37,11 @@
             "helper" : "__interval_helper__",
             "label" : "__interval_label__",
             "order": 5
+         },
+         "webhook_url" : {
+            "helper" : "__webhook_url_helper__",
+            "label" : "__webhook_url__",
+            "order" : 6
          }
       }
    },
@@ -66,6 +71,10 @@
          "interval" : {
             "required" : true,
             "type" : "number"
+         },
+         "webhook_url" : {
+            "required" : false,
+            "type" : "string"
          }
       },
       "required" : true,

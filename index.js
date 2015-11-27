@@ -20,11 +20,13 @@ function NetatmoWelcome (id, controller) {
     this.grant_type         = undefined;
     this.access_token       = undefined;
     this.refresh_token      = undefined;
-    this.token_expire_time  = undefined;
-    this.timer              = undefined;
+    this.tokentimer         = undefined;
+    this.datatimer          = undefined;
     this.numberOfHomes      = undefined;
     this.userLocale         = undefined;
+    this.usingWebhook       = false;
     this.devices            = {};
+    this.cameraIndex        = {};
 }
 
 inherits(NetatmoWelcome, AutomationModule);
@@ -48,35 +50,65 @@ NetatmoWelcome.prototype.init = function (config) {
 
     var intervalTime    = parseInt(self.config.interval) * 60 * 1000;
         
-    self.timer = setInterval(function() {
-        self.startFetch(self);
+    self.datatimer = setInterval(function() {
+        self.fetchHomeData(self);
     }, intervalTime);
     
-    self.startFetch(self);
-   
+    self.fetchToken();
+    
+    Welcome = function(url, request) {
+        
+        if (request.body!=undefined) {
+
+            var response = JSON.parse(request.body);            
+            self.processWebhook(response)
+        }
+        
+        return 'OK';
+    };  
 };
 
 NetatmoWelcome.prototype.stop = function () {
     var self = this;
     
-    if (self.timer) {
-        clearInterval(self.timer);
-        self.timer = undefined;
+    if (self.datatimer) {
+        clearInterval(self.datatimer);
+        self.datatimer = undefined;
     }
     
-    if (typeof self.devices !== 'undefined') {
-        _.each(self.devices,function(value, key) {
-            self.controller.devices.remove(value.id);
-        });
-        self.devices = {};
+    if (self.tokentimer) {
+        clearInterval(self.tokentimer);
+        self.tokentimer = undefined;
     }
+    
+    self.removeDevices();
+    
+    ws.revokeExternalAccess("Welcome");
+    Welcome = null;
+    if (self.usingWebhook) {
+        self.dropWebhook();
+    }
+    self.numberOfHomes = undefined;
     
     NetatmoWelcome.super_.prototype.stop.call(this);
 };
 
-NetatmoWelcome.prototype.addDevice = function(prefix,overlay) {
+// ----------------------------------------------------------------------------
+// --- Module methods
+// ----------------------------------------------------------------------------
+
+NetatmoWelcome.prototype.addDevice = function(prefix,title) {
 
     var self = this;
+    var overlay =  {
+        metrics : {
+            probeTitle: 'Welcome',
+            icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
+            scaleTitle: '',
+            title: title
+        }
+    };
+    
     var deviceParams = {
         overlay: overlay,
         deviceId: "NetatmoWelcome_"+prefix+"_" + this.id,
@@ -88,68 +120,95 @@ NetatmoWelcome.prototype.addDevice = function(prefix,overlay) {
     return self.devices[prefix];
 };
 
-// ----------------------------------------------------------------------------
-// --- Module methods
-// ----------------------------------------------------------------------------
+NetatmoWelcome.prototype.addMotionSensor = function(prefix,title) {
 
-NetatmoWelcome.prototype.startFetch = function (instance) {
+    var self = this;
+    var overlay =  {
+        metrics : {
+            probeTitle: 'Welcome',
+            icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
+            scaleTitle: '',
+            title: title,
+            level: 'off'
+        }
+    };
+    
+    var deviceParams = {
+        overlay: overlay,
+        deviceId: "NetatmoWelcome_"+prefix+"_" + this.id,
+        moduleId: prefix+"_"+this.id
+    };
+    deviceParams.overlay['deviceType'] = "sensorBinary";
+    
+    self.devices[prefix] = self.controller.devices.create(deviceParams);
+    return self.devices[prefix];
+};
 
-    var self = instance;
-    var now_seconds = new Date().getTime() / 1000;
-    if (self.token_expire_time==undefined||now_seconds>=self.token_expire_time) {
-        //console.logJS('new token needed');
-        self.fetchToken(instance);
-    }
-    else {
-        //console.logJS('token ok');
-        self.fetchHomeData(instance);
-        
-    }
-}        
-        
+NetatmoWelcome.prototype.removeDevices = function() {
 
-NetatmoWelcome.prototype.fetchToken = function (instance) {
+    var self = this;
     
-    var self = instance;
-    var now_seconds = new Date().getTime() / 1000;
-    
-    if (self.refresh_token == undefined) {
-    
-        http.request({
-            url: "https://api.netatmo.net/oauth2/token",
-            method: "POST",
-            headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            data: {
-                grant_type: 'password',
-                client_id: this.client_id,
-                client_secret: this.client_secret,
-                username: this.username,
-                password: this.password,
-                scope: 'read_camera'
-            },
-            async: true,
-            success: function(response) {
-                self.access_token = response.data.access_token;
-                self.refresh_token = response.data.refresh_token;
-                self.token_expire_time = now_seconds + response.data.expires_in;
-                self.fetchHomeData(instance);
-            },
-            error: function(response) {
-                console.error("[NetatmoWelcome] Token fetch error");
-                console.logJS(response);
-                self.controller.addNotification(
-                    "error", 
-                    self.langFile.err_fetch_token, 
-                    "module", 
-                    "NetatmoWelcome"
-                );
-            }
+    if (typeof self.devices !== 'undefined') {
+        _.each(self.devices,function(value, key) {
+            self.controller.devices.remove(value.id);
         });
+        self.devices = {};
     }
+}; 
+
+NetatmoWelcome.prototype.fetchToken = function () {
     
-    else {
+    var self = this;
+
+    http.request({
+        url: "https://api.netatmo.net/oauth2/token",
+        method: "POST",
+        headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: {
+            grant_type: 'password',
+            client_id: self.client_id,
+            client_secret: self.client_secret,
+            username: self.username,
+            password: self.password,
+            scope: 'read_camera'
+        },
+        async: true,
+        success: function(response) {
+            self.access_token = response.data.access_token;
+            self.refresh_token = response.data.refresh_token;
+            if(self.tokentimer){
+                clearTimeout(self.tokentimer);
+            }
+            self.tokentimer = setInterval(function() {
+                self.fetchRefreshToken();
+            }, (response.data.expires_in-100) * 1000);
+            self.fetchHomeData(self);
+            if (self.config.webhook_url.toString()!='') {
+                //ws.allowExternalAccess("Welcome", self.controller.auth.ROLE.USER);
+                ws.allowExternalAccess("Welcome", self.controller.auth.ROLE.ANONYMOUS);
+                self.setWebhook(self.config.webhook_url.toString());
+            }
+        },
+        error: function(response) {
+            console.error("[NetatmoWelcome] Initial token fetch error");
+            console.logJS(response);
+            self.controller.addNotification(
+                "error", 
+                self.langFile.err_fetch_token, 
+                "module", 
+                "NetatmoWelcome"
+            );
+        }
+    });
+};
+
+NetatmoWelcome.prototype.fetchRefreshToken = function () {
+    
+    var self = this;
+    
+    if (self.refresh_token != undefined) {
         http.request({
             url: "https://api.netatmo.net/oauth2/token",
             method: "POST",
@@ -158,16 +217,14 @@ NetatmoWelcome.prototype.fetchToken = function (instance) {
             },
             data: {
                 grant_type: 'refresh_token',
-                client_id: this.client_id,
-                client_secret: this.client_secret,
-                refresh_token: this.refresh_token
+                client_id: self.client_id,
+                client_secret: self.client_secret,
+                refresh_token: self.refresh_token
             },
             async: true,
             success: function(response) {
                 self.access_token = response.data.access_token;
                 self.refresh_token = response.data.refresh_token;
-                self.token_expire_time = now_seconds + response.data.expires_in;
-                self.fetchHomeData(instance);
             },
             error: function(response) {
                 console.error("[NetatmoWelcome] Refresh token fetch error");
@@ -178,25 +235,31 @@ NetatmoWelcome.prototype.fetchToken = function (instance) {
                     "module", 
                     "NetatmoWelcome"
                 );
-                if (response.data.status == -1 && response.data.statusText.toLowerCase().indexOf('timeout') != -1) {
-                    // should not be happening, but anyway..
-                    self.fetchToken(instance);
-                }
+                // retry over with new base token
+                self.fetchToken();
             }
-        });        
+        });
     }
-};    
+    else {
+        console.error("[NetatmoWelcome] Missing refresh token");
+        self.refresh_token = undefined;
+        // start over with new base token
+        self.fetchToken();
+    }
+};       
+
+
     
-NetatmoWelcome.prototype.fetchHomeData = function (instance) {
+NetatmoWelcome.prototype.fetchHomeData = function () {
     
-    var self = instance;
-   
-    var url = "https://api.netatmo.com/api/gethomedata?access_token="+this.access_token;
+    var self = this;
+    
+    var url = "https://api.netatmo.com/api/gethomedata?access_token="+self.access_token;
     
     http.request({
         url: url,
         async: true,
-        success: function(response) { self.processResponse(instance,response) },
+        success: function(response) { self.processResponse(response) },
         error: function(response) {
             console.error("[NetatmoWelcome] Home data fetch error");
             console.logJS(response);
@@ -210,49 +273,170 @@ NetatmoWelcome.prototype.fetchHomeData = function (instance) {
     });
 };
 
-NetatmoWelcome.prototype.processResponse = function(instance,response) {
+NetatmoWelcome.prototype.processResponse = function(response) {
     
     console.log("[NetatmoWelcome] Update");
-    var self = instance;
-    
-    if (self.numberOfHomes == undefined) {
-        self.numberOfHomes = response.data.body.homes.length;
+  
+    var self = this;
+    incomingNumberOfHomes = response.data.body.homes.length;
+  
+    if (self.numberOfHomes == undefined||self.numberOfHomes!=incomingNumberOfHomes) {
+        // new or changed setting
+        self.removeDevices();
+        self.numberOfHomes = incomingNumberOfHomes;
         self.userLocale = response.data.body.user.reg_locale;
         for (hc = 0; hc < self.numberOfHomes; hc++) {
             var homeName = response.data.body.homes[hc].name;
+            var homeID = response.data.body.homes[hc].id;
             var userCount = response.data.body.homes[hc].persons.length;
+            self.addDevice('home_' + hc,self.langFile.someone_present + ' ' + homeName);
             for (uc = 0; uc < userCount; uc++) {
                 var userName = response.data.body.homes[hc].persons[uc].pseudo;
+                var userID = response.data.body.homes[hc].persons[uc].id;
                 if (userName!=null) {
-               
-                    self.addDevice('home_'+hc+'_'+uc,{
-                        metrics : {
-                            probeTitle: 'Welcome',
-                            icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
-                            scaleTitle: '?',
-                            title: userName + ' ' + homeName
-                        }
-                    });
+                    self.addDevice('person_'+userID,userName + ' ' + homeName);
+                }
+            }
+            if (self.usingWebhook) {
+                var cameraCount = response.data.body.homes[hc].cameras.length;
+                for (cc = 0; cc < cameraCount; cc++) {
+                    var cameraID = response.data.body.homes[hc].cameras[cc].id;
+                    var cameraName = response.data.body.homes[hc].cameras[cc].name;
+                    self.addMotionSensor('motion_'+cc,cameraName + ' ' + self.langFile.motion);
+                    self.cameraIndex[cameraID]=cc;
                 }
             }
         }
     }
-   
-    for (hc = 0; hc < self.numberOfHomes; hc++) {
+    
+    var homesCheck = [];
+    
+    for (hc = 0; hc < incomingNumberOfHomes; hc++) {
         var userCount = response.data.body.homes[hc].persons.length;
+        var homeID = response.data.body.homes[hc].id;
+        homesCheck[hc] = 'off';
         for (uc = 0; uc < userCount; uc++) {
             var userName = response.data.body.homes[hc].persons[uc].pseudo;
+            var userID = response.data.body.homes[hc].persons[uc].id;
             if (userName!=null) {
-                if (response.data.body.homes[hc].persons[uc].out_of_sight) {
-                    self.devices['home_'+hc+'_'+uc].set('metrics:level','off');
+                var switchSetting = response.data.body.homes[hc].persons[uc].out_of_sight ? 'off' : 'on';
+                if (switchSetting == 'on') {
+                    homesCheck[hc] = 'on';
                 }
-                else {
-                    self.devices['home_'+hc+'_'+uc].set('metrics:level','on');
-                    //var icon = '/ZAutomation/api/v1/load/modulemedia/Netatmo/'+variable.toLowerCase()+'.png';
-                    //self.devices[variable + '_' + dc + '_' + mc].set('metrics:icon', icon);
+                if(typeof self.devices['person_' + userID] == "undefined"){
+                    console.log("[NetatmoWelcome] no device for user "+userName+" ("+userID+"), creating");
+                    self.addDevice('person_' + userID,userName + ' ' + homeName);
                 }
+                self.devices['person_' + userID].set('metrics:level',switchSetting);
             }
         }
+    }
+    // global status per home
+    for (var hid in homesCheck) {
+        self.devices['home_'+hid].set('metrics:level',homesCheck[hid]);
     }
 };
 
+NetatmoWelcome.prototype.setWebhook = function(url) {
+    
+    var self = this;
+ 
+    var base_url = "https://api.netatmo.com/api/addwebhook?access_token="+self.access_token+"&url="+encodeURIComponent(url)+"&app_type=app_camera";
+    
+    http.request({
+        url: base_url,
+        async: true,
+        success: function(response) {
+            if (response.data.status == 'ok') {
+                console.log("[NetatmoWelcome] webhook set");
+                self.usingWebhook = true;
+            }
+        },
+        error: function(response) {
+            console.error("[NetatmoWelcome] webhook set error");
+            console.logJS(response);
+            self.controller.addNotification(
+                "error", 
+                self.langFile.err_send_message, 
+                "module", 
+                "NetatmoWelcome"
+            );
+        }
+    }); 
+};
+
+NetatmoWelcome.prototype.dropWebhook = function() {
+    
+    var self = this;
+    var token = self.fetchToken();
+    var base_url = "https://api.netatmo.com/api/dropwebhook?access_token="+self.access_token+"&app_type=app_camera";
+    
+    http.request({
+        url: base_url,
+        async: true,
+        success: function(response) {
+            if (response.data.status == 'ok') {
+                console.log("[NetatmoWelcome] webhook dropped");
+                self.usingWebhook = false;
+            }
+        },
+        error: function(response) {
+            console.error("[NetatmoWelcome] webhook drop error");
+            console.logJS(response);
+            self.controller.addNotification(
+                "error", 
+                self.langFile.err_send_message, 
+                "module", 
+                "NetatmoWelcome"
+            );
+        }
+    }); 
+};
+
+
+NetatmoWelcome.prototype.processWebhook = function(response) {
+    
+    var self = this;
+    var message = response["message"];
+    console.log("[NetatmoWelcome] Webhook " + message);
+    var app_type = response["app_type"];
+    var event_type = response["event_type"];
+    var camera_id = response["camera_id"];
+    var camera_no = self.cameraIndex[camera_id];
+    var home_id = response["home_id"];
+    var currentDate = new Date();
+
+    if (event_type == 'movement') {
+        if (typeof self.devices['motion_'+camera_no]!== undefined) {
+            var vDev = self.devices['motion_'+camera_no];
+            vDev.set('metrics:level', 'on');
+            vDev.set('metrics:timestamp',currentDate.getTime());
+            setTimeout(function(){
+                var vDev = self.devices['motion_'+camera_no];
+                vDev.set('metrics:level', 'off');
+                vDev.set('metrics:timestamp',currentDate.getTime());
+            }, 10000); 
+        }
+        else {
+            console.log("[NetatmoWelcome] Webhook can't find camera id ");
+        }
+     }
+     else if (event_type == 'person') {
+        // more than one person recognized at the same time?
+        var personID = response["persons"][0]["id"];
+        var isKnown = response["persons"][0]["is_known"];
+        if (isKnown) {
+            self.devices['person_'+personID].set('metrics:level','on');
+        }                
+    }
+    else if (event_type == 'connection') {
+        console.log("[NetatmoWelcome] " + response["home_name"] + "connected");    
+    }
+    else if (event_type == 'disconnection') {
+        console.log("[NetatmoWelcome] " + response["home_name"] + "disconnected");        
+    }
+    else {
+         console.log("[NetatmoWelcome] Unknown webhook"); 
+    } 
+};        
+ 

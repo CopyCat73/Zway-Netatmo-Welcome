@@ -9,5 +9,9 @@
   "interval_helper": "Specifies data refresh interval in minutes",
   "err_fetch_data": "Error fetching Netatmo data",
   "err_fetch_token": "Error fetching Netatmo token",
-  "err_fetch_refreshtoken": "Error fetching Netatmo refresh token"
+  "err_fetch_refreshtoken": "Error fetching Netatmo refresh token",
+  "webhook_url": "Webhook url",
+  "webhook_url_helper" : "Enter your webhook url.",
+  "someone_present": "Someone present",
+  "motion": "Motion"
 }
