@@ -427,7 +427,20 @@ NetatmoWelcome.prototype.processWebhook = function(response) {
         var isKnown = response["persons"][0]["is_known"];
         if (isKnown) {
             self.devices['person_'+personID].set('metrics:level','on');
-        }                
+        }
+        if (typeof self.devices['motion_'+camera_no]!== undefined) {
+            var vDev = self.devices['motion_'+camera_no];
+            vDev.set('metrics:level', 'on');
+            vDev.set('metrics:timestamp',currentDate.getTime());
+            setTimeout(function(){
+                var vDev = self.devices['motion_'+camera_no];
+                vDev.set('metrics:level', 'off');
+                vDev.set('metrics:timestamp',currentDate.getTime());
+            }, 10000); 
+        }
+        else {
+            console.log("[NetatmoWelcome] Webhook can't find camera id ");
+        }
     }
     else if (event_type == 'connection') {
         console.log("[NetatmoWelcome] " + response["home_name"] + "connected");    
