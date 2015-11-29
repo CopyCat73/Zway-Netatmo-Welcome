@@ -16,7 +16,7 @@ data is retrieved (in minutes). Do not use the same app credentials for differen
 
 Based on your Netatmo configuration the module creates a home and users for each of your Netatmo
 Welcome devices. Each identified person in the Welcome station is shown on the dashboard as a binary switch;
-off: person left, on: person is home. For each home there's also a "someone at home" binary switch created.
+off: person left, on: person is home. For each home there's also a presence binary switch created.
 Whenever there's one ore more persons at home, this device is on.
 
 # Webhook

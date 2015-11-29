@@ -12,6 +12,6 @@
   "err_fetch_refreshtoken": "Error fetching Netatmo refresh token",
   "webhook_url": "Webhook url",
   "webhook_url_helper" : "Enter your webhook url.",
-  "someone_present": "Someone present",
+  "someone_present": "Presence",
   "motion": "Motion"
 }
