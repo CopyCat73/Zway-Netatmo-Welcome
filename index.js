@@ -114,7 +114,7 @@ NetatmoWelcome.prototype.addDevice = function(prefix,title) {
         deviceId: "NetatmoWelcome_"+prefix+"_" + this.id,
         moduleId: prefix+"_"+this.id
     };
-    deviceParams.overlay['deviceType'] = "switchBinary";
+    deviceParams.overlay['deviceType'] = "sensorBinary";
     
     self.devices[prefix] = self.controller.devices.create(deviceParams);
     return self.devices[prefix];
@@ -289,7 +289,7 @@ NetatmoWelcome.prototype.processResponse = function(response) {
             var homeName = response.data.body.homes[hc].name;
             var homeID = response.data.body.homes[hc].id;
             var userCount = response.data.body.homes[hc].persons.length;
-            self.addDevice('home_' + hc,self.langFile.someone_present + ' ' + homeName);
+            self.addDevice('home_' + homeID,self.langFile.someone_present + ' ' + homeName);
             for (uc = 0; uc < userCount; uc++) {
                 var userName = response.data.body.homes[hc].persons[uc].pseudo;
                 var userID = response.data.body.homes[hc].persons[uc].id;
@@ -309,19 +309,19 @@ NetatmoWelcome.prototype.processResponse = function(response) {
         }
     }
     
-    var homesCheck = [];
+    var homesCheck = {};
     
     for (hc = 0; hc < incomingNumberOfHomes; hc++) {
         var userCount = response.data.body.homes[hc].persons.length;
         var homeID = response.data.body.homes[hc].id;
-        homesCheck[hc] = 'off';
+        homesCheck[homeID] = 'off';
         for (uc = 0; uc < userCount; uc++) {
             var userName = response.data.body.homes[hc].persons[uc].pseudo;
             var userID = response.data.body.homes[hc].persons[uc].id;
             if (userName!=null) {
                 var switchSetting = response.data.body.homes[hc].persons[uc].out_of_sight ? 'off' : 'on';
                 if (switchSetting == 'on') {
-                    homesCheck[hc] = 'on';
+                    homesCheck[homeID] = 'on';
                 }
                 if(typeof self.devices['person_' + userID] == "undefined"){
                     console.log("[NetatmoWelcome] no device for user "+userName+" ("+userID+"), creating");
@@ -333,7 +333,10 @@ NetatmoWelcome.prototype.processResponse = function(response) {
     }
     // global status per home
     for (var hid in homesCheck) {
-        self.devices['home_'+hid].set('metrics:level',homesCheck[hid]);
+        if (self.devices['home_'+hid].get('metrics:level')!=homesCheck[hid]) {
+            //only update if changed 
+            self.devices['home_'+hid].set('metrics:level',homesCheck[hid]);
+        }        
     }
 };
 
@@ -404,6 +407,8 @@ NetatmoWelcome.prototype.processWebhook = function(response) {
     var camera_id = response["camera_id"];
     var camera_no = self.cameraIndex[camera_id];
     var home_id = response["home_id"];
+    var snapshot_id = response["snapshot_id"];
+    var snapshot_key = response["snapshot_key"];
     var currentDate = new Date();
 
     if (event_type == 'movement') {
@@ -415,7 +420,15 @@ NetatmoWelcome.prototype.processWebhook = function(response) {
                 var vDev = self.devices['motion_'+camera_no];
                 vDev.set('metrics:level', 'off');
                 vDev.set('metrics:timestamp',currentDate.getTime());
-            }, 10000); 
+            }, 10000);
+            
+            var mailparams = {
+                subject:    "Motion detected",
+                message:    "message"
+            };    
+            if (snapshot_id !== undefined && snapshot_key !== undefined) {
+                //self.getSnapshot(snapshot_id,snapshot_key);
+            }
         }
         else {
             console.log("[NetatmoWelcome] Webhook can't find camera id ");
@@ -427,6 +440,9 @@ NetatmoWelcome.prototype.processWebhook = function(response) {
         var isKnown = response["persons"][0]["is_known"];
         if (isKnown) {
             self.devices['person_'+personID].set('metrics:level','on');
+            if (self.devices['home_'+home_id].get('metrics:level') == 'off') {
+               self.devices['home_'+home_id].set('metrics:level','on');
+            }
         }
         if (typeof self.devices['motion_'+camera_no]!== undefined) {
             var vDev = self.devices['motion_'+camera_no];
@@ -443,13 +459,42 @@ NetatmoWelcome.prototype.processWebhook = function(response) {
         }
     }
     else if (event_type == 'connection') {
-        console.log("[NetatmoWelcome] " + response["home_name"] + "connected");    
+        console.log("[NetatmoWelcome] " + response["home_name"] + " connected");    
     }
     else if (event_type == 'disconnection') {
-        console.log("[NetatmoWelcome] " + response["home_name"] + "disconnected");        
+        console.log("[NetatmoWelcome] " + response["home_name"] + " disconnected");        
     }
     else {
          console.log("[NetatmoWelcome] Unknown webhook"); 
     } 
-};        
+};
+
+
+NetatmoWelcome.prototype.getSnapshot = function(id,key) {
+    
+    var self = this;
+    var base_url = "https://api.netatmo.com/api/getcamerapicture?image_id="+id+"&key="+key;
+    
+    http.request({
+        url: base_url,
+        async: true,
+        success: function(response) {
+            console.log("[NetatmoWelcome] get snapshot");
+            if (response.contentType === 'image/jpeg') {
+                var imageStream = response.data;
+                //code
+            }
+        },
+        error: function(response) {
+            console.error("[NetatmoWelcome] get snapshot error");
+            console.logJS(response);
+            self.controller.addNotification(
+                "error", 
+                self.langFile.err_send_message, 
+                "module", 
+                "NetatmoWelcome"
+            );
+        }
+    }); 
+};
  
