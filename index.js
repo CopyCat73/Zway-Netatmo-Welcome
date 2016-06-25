@@ -100,45 +100,65 @@ NetatmoWelcome.prototype.stop = function () {
 NetatmoWelcome.prototype.addDevice = function(prefix,title) {
 
     var self = this;
-    var overlay =  {
-        metrics : {
-            probeTitle: 'Welcome',
-            icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
-            scaleTitle: '',
-            title: title
-        }
-    };
     
+    var defaults = {
+        probeType: 'welcome',
+        probeTitle: 'Welcome',
+        scaleTitle: '',
+        icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
+        title: title
+    }
+        
     var deviceParams = {
-        overlay: overlay,
+        overlay: { 
+            deviceType: "sensorBinary",
+            probeType: defaults.probeType,
+            metrics: { 
+                probeTitle: defaults.probeTitle,
+                scaleTitle: defaults.scaleTitle
+            }
+        },
+        defaults: {
+            metrics: defaults
+        },
         deviceId: "NetatmoWelcome_"+prefix+"_" + this.id,
-        moduleId: prefix+"_"+this.id
+        moduleId: prefix+"_"+this.id,
     };
-    deviceParams.overlay['deviceType'] = "sensorBinary";
-    
+
     self.devices[prefix] = self.controller.devices.create(deviceParams);
     return self.devices[prefix];
+
 };
 
 NetatmoWelcome.prototype.addMotionSensor = function(prefix,title) {
 
     var self = this;
-    var overlay =  {
-        metrics : {
-            probeTitle: 'Welcome',
-            icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
-            scaleTitle: '',
-            title: title,
-            level: 'off'
-        }
-    };
+    
+    var defaults = {
+        probeType: 'welcome',
+        probeTitle: 'Welcome',
+        scaleTitle: '',
+        icon: '/ZAutomation/api/v1/load/modulemedia/NetatmoWelcome/icon.png',
+        title: title,
+        level: 'off'
+    }
     
     var deviceParams = {
-        overlay: overlay,
+        overlay: { 
+            deviceType: "sensorBinary",
+            probeType: defaults.probeType,
+            metrics: { 
+                probeTitle: defaults.probeTitle,
+                scaleTitle: defaults.scaleTitle
+            },
+            level: 'off'
+        },
+        defaults: {
+            metrics: defaults
+        },
         deviceId: "NetatmoWelcome_"+prefix+"_" + this.id,
-        moduleId: prefix+"_"+this.id
+        moduleId: prefix+"_"+this.id,
     };
-    deviceParams.overlay['deviceType'] = "sensorBinary";
     
     self.devices[prefix] = self.controller.devices.create(deviceParams);
     return self.devices[prefix];
